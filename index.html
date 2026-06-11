@@ -139,7 +139,9 @@ window.addEventListener('orientationchange', ()=>setTimeout(resize,200));
 resize();
 
 // ---- Input state ----
-const input = { x:0, y:0, punch:false, kick:false, jump:false, _p:false,_k:false,_j:false };
+// tPunch/tKick/tJump = touch-button held; punch/kick/jump = combined (touch||keyboard) each frame.
+const input = { x:0, y:0, punch:false, kick:false, jump:false,
+                tPunch:false, tKick:false, tJump:false, _p:false,_k:false,_j:false };
 // keyboard
 const keys = {};
 addEventListener('keydown', e=>{ keys[e.code]=true; if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); });
@@ -151,9 +153,10 @@ function readKeyboard(){
   if(keys['ArrowUp']||keys['KeyW']) y-=1;
   if(keys['ArrowDown']||keys['KeyS']) y+=1;
   if(x||y){ input.x=x; input.y=y; }
-  input.punch = input.punch || keys['KeyJ'];
-  input.kick  = input.kick  || keys['KeyK'];
-  input.jump  = input.jump  || keys['KeyL'] || keys['Space'];
+  // combine touch buttons with keyboard, recomputed fresh every frame (no sticky state)
+  input.punch = input.tPunch || !!keys['KeyJ'];
+  input.kick  = input.tKick  || !!keys['KeyK'];
+  input.jump  = input.tJump  || !!keys['KeyL'] || !!keys['Space'];
 }
 
 // ---- Touch joystick ----
@@ -199,7 +202,7 @@ function bindBtn(id, prop){
   el.addEventListener('mousedown', e=>{e.preventDefault(); input[prop]=true;});
   el.addEventListener('mouseup',   e=>{e.preventDefault(); input[prop]=false;});
 }
-bindBtn('bPunch','punch'); bindBtn('bKick','kick'); bindBtn('bJump','jump');
+bindBtn('bPunch','tPunch'); bindBtn('bKick','tKick'); bindBtn('bJump','tJump');
 
 // edge-trigger helpers (true only on the frame a press begins)
 function edge(){
@@ -395,8 +398,7 @@ function loop(now){
 function update(dt){
   game.time+=dt;
   if(game.arrowFlash>0) game.arrowFlash-=dt;
-  // input
-  input.punch=input.punch; // (touch sets directly)
+  // input: touch stick drives x/y (cleared when released), keyboard layered in readKeyboard()
   if(stickId===null){ input.x=0; input.y=0; }
   readKeyboard();
   const ev = edge();
