@@ -265,38 +265,48 @@ function mkFighter(isPlayer){
     isPlayer,
     x: isPlayer?120:0, y: FLOOR_BOT-40,
     z:0, vz:0,            // jump height
-    w:34, h:64,
+    w:34, h:72,
     dir:1,
-    hp:isPlayer?100:30, maxhp:isPlayer?100:30,
-    speed:isPlayer?2.6:1.3,
+    hp:isPlayer?140:14, maxhp:isPlayer?140:14,
+    speed:isPlayer?2.8:1.05,
     state:'idle',        // idle walk attack hurt down
     atkT:0, atkType:null, hurtT:0, downT:0, cool:0,
     hitset:null,         // enemies hit by current attack
     anim:0,
-    jersey: isPlayer? '#ff7a1f' : '#2f5fc0',
-    num: isPlayer? '33' : '00',
-    skin:'#caa07a',
+    // ---- look (Knicks player by default) ----
+    team:   isPlayer?'knicks':'spurs',
+    jersey: isPlayer?'#f5821f':'#16161c',  // Knicks orange / Spurs black
+    trim:   isPlayer?'#1d428a':'#c9cdd3',  // Knicks blue / Spurs silver
+    numColor:isPlayer?'#10204a':'#f2f4f7',
+    num:    isPlayer?'33':'00',
+    shorts: isPlayer?'#1d428a':'#23242b',
+    shortsTrim: isPlayer?'#f5821f':'#c9cdd3',
+    skin:'#c9966a',
+    hair:'#241608',
+    headband: isPlayer?'#1d428a':null,
     aiT: 0,
     flashT:0,
   };
 }
 
-// Enemy roster (rival teams)
+// Enemy roster — the Spurs (black & silver / white alternates)
 const ROSTER = [
-  {jersey:'#2f5fc0', num:'19', skin:'#caa07a'},
-  {jersey:'#2f5fc0', num:'50', skin:'#8a6a4a'},
-  {jersey:'#2f5fc0', num:'7',  skin:'#caa07a'},
-  {jersey:'#222',    num:'21', skin:'#8a6a4a'}, // Spurs-ish thug
-  {jersey:'#222',    num:'5',  skin:'#caa07a'},
+  {jersey:'#16161c', trim:'#c9cdd3', numColor:'#f2f4f7', shorts:'#202128', shortsTrim:'#c9cdd3', num:'21', skin:'#8a6a4a', hair:'#141414'},
+  {jersey:'#eef0f3', trim:'#16161c', numColor:'#16161c', shorts:'#d6dadf', shortsTrim:'#16161c', num:'50', skin:'#caa07a', hair:'#3a2a16'},
+  {jersey:'#16161c', trim:'#c9cdd3', numColor:'#f2f4f7', shorts:'#202128', shortsTrim:'#c9cdd3', num:'9',  skin:'#caa07a', hair:'#141414'},
+  {jersey:'#eef0f3', trim:'#16161c', numColor:'#16161c', shorts:'#d6dadf', shortsTrim:'#16161c', num:'20', skin:'#7a5a3a', hair:'#141414'},
+  {jersey:'#16161c', trim:'#c9cdd3', numColor:'#f2f4f7', shorts:'#202128', shortsTrim:'#c9cdd3', num:'44', skin:'#caa07a', hair:'#241608'},
 ];
 
 function spawnEnemy(side){
   const e = mkFighter(false);
   const r = ROSTER[(Math.random()*ROSTER.length)|0];
-  e.jersey=r.jersey; e.num=r.num; e.skin=r.skin;
-  const buff = 1 + (game.stage-1)*0.35;
-  e.maxhp = Math.round(30*buff); e.hp=e.maxhp;
-  e.speed = 1.15 + Math.random()*0.5 + (game.stage-1)*0.15;
+  e.jersey=r.jersey; e.trim=r.trim; e.numColor=r.numColor;
+  e.shorts=r.shorts; e.shortsTrim=r.shortsTrim; e.num=r.num; e.skin=r.skin; e.hair=r.hair;
+  const buff = 1 + (game.stage-1)*0.22;            // gentler scaling
+  e.maxhp = Math.round(13*buff); e.hp=e.maxhp;
+  e.speed = 0.95 + Math.random()*0.3 + (game.stage-1)*0.08;
+  e.aiT = 0.4 + Math.random()*0.6;                 // small reaction delay
   const screenRight = game.cam + VW;
   e.x = side<0 ? game.cam-40 : screenRight+40;
   e.y = FLOOR_TOP + 20 + Math.random()*(FLOOR_BOT-FLOOR_TOP-40);
@@ -310,13 +320,15 @@ function buildStage(stage){
   game.cam=0; game.gateX = VW*0.5;
   player.x=120; player.y=FLOOR_BOT-40; player.z=0; player.vz=0;
   player.state='idle'; player.atkT=0; player.hurtT=0; player.downT=0;
-  if(stage===1) player.hp=player.maxhp; else player.hp=Math.min(player.maxhp, player.hp+30);
-  // waves spaced across the world
+  // heal up between stages
+  if(stage===1) player.hp=player.maxhp; else player.hp=Math.min(player.maxhp, player.hp+60);
+  // waves spaced across the world — kept light so you can push through
   const waves=[];
-  const n = 3 + stage; // number of waves
+  const n = 2 + stage; // number of waves (3 on stage 1)
   for(let i=0;i<n;i++){
     const at = 150 + i*( (WORLD_W-VW-200) / n );
-    waves.push({ at, count: 2+stage+ (i===n-1?1:0), max: Math.min(4, 2+ (stage>1?1:0)), spawned:false });
+    const count = Math.min(4, 1 + stage) + (i===n-1?1:0); // gentle counts
+    waves.push({ at, count, max: 2 + (stage-1), spawned:false });
   }
   game.waves = waves;
   game.curWave = null;
@@ -327,7 +339,8 @@ function tryAttack(f, type){
   if(f.cool>0 || f.state==='down' || f.atkT>0 || f.hurtT>0) return;
   f.state='attack'; f.atkType=type;
   f.atkT = type==='kick'?0.30:0.22;
-  f.cool = type==='kick'?0.42:0.30;
+  // enemies recover slower than the player, so they pressure you less
+  f.cool = (type==='kick'?0.42:0.30) * (f.isPlayer?1:2.0);
   f.hitset = new Set();
   if(f.isPlayer){ type==='kick'?sfx.kick():sfx.punch(); }
 }
@@ -337,10 +350,11 @@ function attackHitbox(f){
   const total = f.atkType==='kick'?0.30:0.22;
   const t = total - f.atkT;
   if(t < total*0.25 || t > total*0.8) return null;
-  const reach = f.atkType==='kick'?46:38;
+  const reach = f.atkType==='kick'?52:42;
   const hx = f.dir>0 ? f.x + f.w*0.5 : f.x - f.w*0.5 - reach;
   const hy = f.y - f.h*0.55;
-  return { x:hx, y:f.y-22, w:reach, h:30, dmg: f.atkType==='kick'?9:6, kb:f.atkType==='kick'?7:4 };
+  // base damage; enemies get scaled down in applyHit so the player hits much harder
+  return { x:hx, y:f.y-22, w:reach, h:32, dmg: f.atkType==='kick'?15:10, kb:f.atkType==='kick'?11:7 };
 }
 
 function fighterFootBox(f){
@@ -358,11 +372,13 @@ function applyHit(att, vic, hb){
   const vb = { x:vic.x-vic.w*0.5, y:vic.y-vic.h, w:vic.w, h:vic.h };
   const hbox = { x:hb.x, y:vic.y-vic.h, w:hb.w, h:vic.h };
   if(!(hbox.x < vb.x+vb.w && hbox.x+hbox.w > vb.x)) return;
-  vic.hp -= hb.dmg;
+  // Spurs hit the Knick for far less than the Knick hits them.
+  const dmg = att.isPlayer ? hb.dmg : Math.max(2, Math.round(hb.dmg*0.32));
+  vic.hp -= dmg;
   vic.flashT = 0.12;
   vic.dir = att.x>vic.x ? -1 : 1;
-  vic.x += -vic.dir * hb.kb;
-  game.shake = Math.min(10, game.shake+4);
+  vic.x += -vic.dir * hb.kb * (att.isPlayer?1:0.5);
+  game.shake = Math.min(10, game.shake+ (att.isPlayer?5:3));
   spawnHitFx(hb.x + hb.w*(att.dir>0?1:0), vic.y-vic.h*0.6);
   if(att.isPlayer){
     sfx.hit();
@@ -372,7 +388,8 @@ function applyHit(att, vic, hb){
     vic.state='down'; vic.downT=1.1; vic.vz=4.5; vic.z=0;
     if(att.isPlayer){ game.score+=100; addFloaty(vic.x, vic.y-vic.h, '+100'); sfx.ko(); }
   } else {
-    vic.state='hurt'; vic.hurtT=0.22;
+    // longer hitstun on enemies lets you combo; player recovers fast
+    vic.state='hurt'; vic.hurtT = vic.isPlayer?0.18:0.32;
   }
 }
 
@@ -446,7 +463,7 @@ function update(dt){
   // determine active wave
   if(!game.curWave){
     for(const w of game.waves){ if(!w.spawned && p.x > w.at){ game.curWave=w; w.spawned=true;
-      for(let i=0;i<w.count;i++) setTimeout(()=>{ if(game.state==='play') spawnEnemy(Math.random()<0.5?-1:1); }, i*450);
+      for(let i=0;i<w.count;i++) setTimeout(()=>{ if(game.state==='play') spawnEnemy(Math.random()<0.5?-1:1); }, i*700);
       game.arrowFlash=0; break; } }
   }
   if(game.curWave){
@@ -470,6 +487,9 @@ function update(dt){
   }
 
   // ---- enemies ----
+  // Only let a couple of Spurs commit to an attack at the same time (anti-swarm).
+  const attackCap = 1 + Math.floor(game.stage/2);   // 1 on block 1-2, 2 on block 3
+  let attackingNow = game.enemies.reduce((n,e)=>n+(e.atkT>0?1:0),0);
   for(const e of game.enemies){
     e.flashT=Math.max(0,e.flashT-dt);
     if(e.state==='down'){
@@ -490,21 +510,28 @@ function update(dt){
       if(e.atkT<=0) e.state='idle';
       continue;
     }
-    // simple AI: approach player, then attack
+    // simple AI: approach player, then (sometimes) attack
     e.aiT-=dt;
     const dx = player.x - e.x;
     const dy = player.y - e.y;
     const adx=Math.abs(dx), ady=Math.abs(dy);
     e.dir = dx>0?1:-1;
-    if(adx<44 && ady<24){
-      if(e.cool<=0 && Math.random()<0.9){ tryAttack(e, Math.random()<0.5?'kick':'punch'); }
-      else { e.state='idle'; }
+    if(adx<46 && ady<22){
+      // in range: telegraph + attack, gated by cooldown, reaction timer and the swarm cap
+      if(e.cool<=0 && e.aiT<=0 && attackingNow<attackCap && Math.random()<0.55){
+        tryAttack(e, Math.random()<0.45?'kick':'punch');
+        attackingNow++;
+        e.aiT = 0.5 + Math.random()*0.7;   // wait before considering another swing
+      } else {
+        // hover / bob just outside, don't crowd
+        if(adx<30) e.x -= e.dir*e.speed*0.5;
+        e.state='idle';
+      }
     } else {
-      // move toward player with slight spacing
+      // move toward player, keeping a little spacing
       const sp=e.speed;
       let mvx = Math.sign(dx), mvy=Math.sign(dy);
-      // keep some on the flanks
-      e.x += mvx*sp*(adx>50?1:0.4);
+      e.x += mvx*sp*(adx>52?1:0.35);
       e.y += mvy*sp*0.6;
       e.y=Math.max(FLOOR_TOP, Math.min(FLOOR_BOT, e.y));
       e.state='walk'; e.anim+=dt*8;
@@ -575,78 +602,191 @@ function render(){
   if(game.bannerT>0){ game.bannerT-=1/60; drawBanner(); }
 }
 
+const WALL_TOP = 88;
+function hash(n){ const s=Math.sin(n*127.1)*43758.5453; return s-Math.floor(s); }
+
 function drawBackground(){
   const cam=game.cam;
-  // sky gradient (dusk NYC)
-  const g=ctx.createLinearGradient(0,0,0,VH);
-  g.addColorStop(0,'#2a1840'); g.addColorStop(0.5,'#532038'); g.addColorStop(1,'#1a1020');
+  // ---- dusk sky ----
+  const g=ctx.createLinearGradient(0,0,0,FLOOR_TOP+30);
+  g.addColorStop(0,'#160f2c'); g.addColorStop(0.4,'#37203f');
+  g.addColorStop(0.78,'#7c3540'); g.addColorStop(1,'#b55a3e');
   ctx.fillStyle=g; ctx.fillRect(0,0,VW,VH);
+  // hazy low sun glow
+  const sun=ctx.createRadialGradient(VW*0.72,FLOOR_TOP-20,8, VW*0.72,FLOOR_TOP-20,260);
+  sun.addColorStop(0,'rgba(255,190,110,0.55)'); sun.addColorStop(1,'rgba(255,190,110,0)');
+  ctx.fillStyle=sun; ctx.fillRect(0,0,VW,FLOOR_TOP);
 
-  // distant skyline (parallax)
-  drawSkyline(cam*0.2, 70, '#1d1530', 60, 120);
-  drawSkyline(cam*0.4, 110, '#241a3a', 90, 150);
+  // ---- parallax skyline (silhouettes above the wall) ----
+  drawSkyline(cam*0.14, '#26193a', 60, 150);
+  drawSkyline(cam*0.30, '#2f2147', 40, 105);
 
-  // brick building wall behind the street
-  const wallTop=80, wallBot=FLOOR_TOP;
-  ctx.fillStyle='#5a2d2a'; ctx.fillRect(0,wallTop,VW,wallBot-wallTop);
-  // brick lines
-  ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.lineWidth=1;
-  const bw=40,bh=18; const off=-(cam*0.7)% (bw);
-  for(let y=wallTop;y<wallBot;y+=bh){
-    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(VW,y); ctx.stroke();
-    const stagger=((Math.round((y-wallTop)/bh))%2)*(bw/2);
-    for(let x=off+stagger;x<VW;x+=bw){ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y+bh); ctx.stroke(); }
-  }
-  // lit windows + graffiti accents
-  for(let i=0;i<14;i++){
-    const wx = ((i*180 - cam*0.7) % (VW+180)); const X = wx<-60?wx+VW+180:wx;
-    ctx.fillStyle = (i%3===0)?'#ffcf6e':'#3a2030';
-    ctx.fillRect(X, wallTop+24+ (i%4)*24, 22, 16);
-    ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(X-2,wallTop+22+(i%4)*24,2,20);
-  }
-
-  // sidewalk / street
-  const sg=ctx.createLinearGradient(0,FLOOR_TOP,0,VH);
-  sg.addColorStop(0,'#3a3a44'); sg.addColorStop(1,'#23232c');
-  ctx.fillStyle=sg; ctx.fillRect(0,FLOOR_TOP,VW,VH-FLOOR_TOP);
-  // curb line
-  ctx.fillStyle='#56565f'; ctx.fillRect(0,FLOOR_TOP,VW,5);
-  ctx.fillStyle='#1a1a20'; ctx.fillRect(0,FLOOR_TOP+5,VW,3);
-  // street lane dashes (parallax with camera)
-  ctx.fillStyle='rgba(255,255,255,0.10)';
-  const dashOff=-(cam)%80;
-  for(let x=dashOff;x<VW;x+=80){ ctx.fillRect(x, FLOOR_BOT-6, 38, 5); }
-  // manhole-ish marks
-  ctx.fillStyle='rgba(0,0,0,0.18)';
-  for(let i=0;i<6;i++){ const X=((i*430 - cam)% (VW+430)); const x=X<-80?X+VW+430:X;
-    ctx.beginPath(); ctx.ellipse(x, FLOOR_TOP+70, 26,8,0,0,7); ctx.fill(); }
+  drawBackWall(cam);
+  drawStreet(cam);
 }
 
-function drawSkyline(scroll, baseY, col, minH, maxH){
-  ctx.fillStyle=col;
-  const seed=12345; let x=-(scroll%200)-200;
-  let i=0;
-  while(x<VW+50){
-    const r = Math.abs(Math.sin((Math.floor((x+scroll)/60))*seed))*1;
-    const h = minH + (r%1)*(maxH-minH);
-    const w = 38+ ((Math.floor((x+scroll)/37))%3)*16;
-    ctx.fillRect(x, FLOOR_TOP-h, w, h);
-    // window dots
-    ctx.fillStyle='rgba(255,220,140,0.12)';
-    for(let wy=FLOOR_TOP-h+8; wy<FLOOR_TOP-6; wy+=12)
-      for(let wx=x+4; wx<x+w-4; wx+=10) if(((wx+wy)|0)%3===0) ctx.fillRect(wx,wy,3,4);
-    ctx.fillStyle=col;
-    x+=w+8; i++;
+function drawSkyline(scroll, col, minH, maxH){
+  const base=WALL_TOP+2;
+  let x=-((scroll%190)+190);
+  while(x<VW+70){
+    const k=Math.floor((x+scroll)/61);
+    const h=minH + hash(k)*(maxH-minH);
+    const w=46 + (k%3)*16;
+    ctx.fillStyle=col; ctx.fillRect(x, base-h, w, h);
+    if(k%4===0){ ctx.fillRect(x+w*0.5-2, base-h-13, 4, 13); }   // antenna
+    if(k%5===2){ ctx.fillRect(x+4, base-h-9, w-8, 9); }          // water tower box
+    ctx.fillStyle='rgba(255,210,130,0.10)';                      // lit windows
+    for(let wy=base-h+8; wy<base-7; wy+=11)
+      for(let wx=x+5; wx<x+w-5; wx+=9) if(((wx*5+wy*3)|0)%5===0) ctx.fillRect(wx,wy,3,5);
+    x+=w+10;
   }
+}
+
+function drawBackWall(cam){
+  const top=WALL_TOP, bot=FLOOR_TOP;
+  const wg=ctx.createLinearGradient(0,top,0,bot);
+  wg.addColorStop(0,'#6f3a2f'); wg.addColorStop(1,'#451f1a');
+  ctx.fillStyle=wg; ctx.fillRect(0,top,VW,bot-top);
+
+  ctx.save(); ctx.beginPath(); ctx.rect(0,top,VW,bot-top); ctx.clip();
+  // brick courses (1:1 with the street)
+  const bw=44,bh=15, ox=-(cam%bw);
+  ctx.lineWidth=1;
+  for(let row=0,y=top; y<bot; y+=bh,row++){
+    ctx.strokeStyle='rgba(0,0,0,0.20)';
+    ctx.beginPath(); ctx.moveTo(0,y+0.5); ctx.lineTo(VW,y+0.5); ctx.stroke();
+    const stag=(row%2)*(bw/2);
+    for(let x=ox+stag-bw; x<VW+bw; x+=bw){ ctx.beginPath(); ctx.moveTo(x+0.5,y); ctx.lineTo(x+0.5,y+bh); ctx.stroke(); }
+    ctx.fillStyle='rgba(255,150,110,0.05)';
+    for(let x=ox+stag-bw; x<VW+bw; x+=bw){ ctx.fillRect(x+2,y+2,bw-4,2); }
+  }
+  // ---- world-anchored wall features ----
+  const lo=cam-260, hi=cam+VW+260;
+  // boarded / lit windows on a world grid
+  for(let wx=Math.floor(lo/150)*150; wx<hi; wx+=150){
+    drawWindow(wx-cam, top+24 + (Math.floor(wx/150)%2)*30, hash(wx));
+  }
+  // fire escapes
+  for(let wx=Math.floor(lo/470)*470; wx<hi; wx+=470){ drawFireEscape(wx-cam+30, top); }
+  // neon MSG marquee
+  for(let wx=Math.floor(lo/1300)*1300; wx<hi; wx+=1300){ drawNeon(wx-cam+220, top+30); }
+  // graffiti tags
+  const tags=[['KNICKS 4-EVER','#ffd24a',-0.05],['SPURS GO HOME!','#5ad0ff',0.04]];
+  for(let wx=Math.floor(lo/640)*640; wx<hi; wx+=640){
+    const t=tags[(Math.floor(wx/640)%tags.length+tags.length)%tags.length];
+    drawGraffiti(wx-cam+40, bot-22, t[0], t[1], t[2]);
+  }
+  // grime at the base of the wall
+  const grime=ctx.createLinearGradient(0,bot-46,0,bot);
+  grime.addColorStop(0,'rgba(0,0,0,0)'); grime.addColorStop(1,'rgba(0,0,0,0.5)');
+  ctx.fillStyle=grime; ctx.fillRect(0,bot-46,VW,46);
+  ctx.restore();
+}
+
+function drawWindow(x,y,h){
+  if(x<-40||x>VW+40) return;
+  ctx.fillStyle='#1b0f10'; ctx.fillRect(x,y,26,34);          // recess
+  ctx.fillStyle = h<0.45 ? '#ffcf6e' : '#2a1820';            // lit or dark
+  ctx.fillRect(x+3,y+3,20,28);
+  if(h<0.45){ ctx.fillStyle='rgba(0,0,0,0.18)'; ctx.fillRect(x+12,y+3,2,28); ctx.fillRect(x+3,y+15,20,2); }
+  ctx.fillStyle='#5a3026'; ctx.fillRect(x-2,y+34,30,4);      // sill
+}
+
+function drawFireEscape(x,top){
+  if(x<-60||x>VW+60) return;
+  ctx.fillStyle='rgba(10,10,14,0.9)';
+  ctx.fillRect(x,top+8,2,FLOOR_TOP-top-8); ctx.fillRect(x+54,top+8,2,FLOOR_TOP-top-8); // rails
+  for(let i=0;i<3;i++){ const py=top+22+i*44;
+    ctx.fillStyle='rgba(20,20,26,0.92)'; ctx.fillRect(x-4,py,64,4);                    // platform
+    ctx.fillStyle='rgba(10,10,14,0.85)';
+    for(let s=0;s<6;s++) ctx.fillRect(x+4+s*9, py+5, 7, 2);                            // grate steps
+  }
+}
+
+function drawNeon(x,y){
+  if(x<-120||x>VW+80) return;
+  const blink = (Math.floor(game.time*2)%8===7) ? 0.4 : 1;   // occasional flicker
+  ctx.save(); ctx.globalAlpha=blink;
+  ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(x-6,y-4,86,34);
+  ctx.shadowColor='#ff3b6b'; ctx.shadowBlur=12;
+  ctx.fillStyle='#ff7aa0'; ctx.font='900 26px Arial'; ctx.textAlign='left';
+  ctx.fillText('MSG', x, y+24);
+  ctx.shadowBlur=0; ctx.globalAlpha=1; ctx.restore();
+}
+
+function drawGraffiti(x,y,txt,col,rot){
+  if(x<-200||x>VW+60) return;
+  ctx.save(); ctx.translate(x,y); ctx.rotate(rot);
+  ctx.font='900 22px Arial'; ctx.textAlign='left';
+  ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fillText(txt,2,2);
+  ctx.fillStyle=col; ctx.globalAlpha=0.92; ctx.fillText(txt,0,0);
+  ctx.restore();
+}
+
+function drawStreet(cam){
+  const sg=ctx.createLinearGradient(0,FLOOR_TOP,0,VH);
+  sg.addColorStop(0,'#36363f'); sg.addColorStop(0.5,'#2a2a32'); sg.addColorStop(1,'#1b1b22');
+  ctx.fillStyle=sg; ctx.fillRect(0,FLOOR_TOP,VW,VH-FLOOR_TOP);
+  // sidewalk band against the wall
+  ctx.fillStyle='#41414b'; ctx.fillRect(0,FLOOR_TOP,VW,24);
+  ctx.strokeStyle='rgba(0,0,0,0.22)'; ctx.lineWidth=1;
+  const sox=-(cam%72);
+  for(let x=sox-72;x<VW+72;x+=72){ ctx.beginPath(); ctx.moveTo(x,FLOOR_TOP); ctx.lineTo(x,FLOOR_TOP+24); ctx.stroke(); }
+  // curb
+  ctx.fillStyle='#5c5c66'; ctx.fillRect(0,FLOOR_TOP+24,VW,4);
+  ctx.fillStyle='#141419'; ctx.fillRect(0,FLOOR_TOP+28,VW,3);
+  // center road line
+  ctx.fillStyle='rgba(255,210,70,0.16)';
+  const dox=-(cam%92);
+  for(let x=dox-92;x<VW+92;x+=92){ ctx.fillRect(x, FLOOR_BOT-4, 48,4); }
+  // manholes + faint puddle reflections (world anchored)
+  for(let wx=Math.floor(cam/360)*360-360; wx<cam+VW+360; wx+=360){
+    const x=wx-cam;
+    ctx.fillStyle='rgba(0,0,0,0.28)'; ctx.beginPath(); ctx.ellipse(x+60,FLOOR_TOP+74,24,7,0,0,7); ctx.fill();
+    ctx.fillStyle='rgba(150,170,210,0.06)'; ctx.beginPath(); ctx.ellipse(x+210,FLOOR_BOT-26,36,9,0,0,7); ctx.fill();
+  }
+}
+
+// ---- foreground street props (drawn in world space, behind fighters) ----
+function drawProps(cam){
+  const lo=cam-140, hi=cam+VW+140;
+  for(let x=Math.ceil(lo/640)*640; x<hi; x+=640) drawDumpster(x+300);
+  for(let x=Math.ceil(lo/430)*430; x<hi; x+=430) drawHydrant(x+120);
+  for(let x=Math.ceil(lo/620)*620; x<hi; x+=620) drawLamp(x+40);
+}
+function drawLamp(x){
+  const baseY=FLOOR_TOP+14;
+  ctx.fillStyle='#15151b'; ctx.fillRect(x-2,baseY-118,4,118);
+  ctx.fillRect(x-2,baseY-118,30,4);
+  ctx.fillStyle='#ffd98a'; ctx.fillRect(x+24,baseY-120,8,8);
+  const gl=ctx.createRadialGradient(x+28,baseY-110,4,x+28,baseY-110,90);
+  gl.addColorStop(0,'rgba(255,210,130,0.20)'); gl.addColorStop(1,'rgba(255,210,130,0)');
+  ctx.fillStyle=gl; ctx.beginPath(); ctx.arc(x+28,baseY-90,90,0,7); ctx.fill();
+}
+function drawHydrant(x){
+  const y=FLOOR_TOP+30;
+  ctx.fillStyle='#c0392b'; ctx.fillRect(x-6,y-18,12,18);
+  ctx.fillRect(x-9,y-13,3,6); ctx.fillRect(x+6,y-13,3,6);
+  ctx.fillStyle='#8c241a'; ctx.beginPath(); ctx.arc(x,y-18,6,Math.PI,0); ctx.fill();
+  ctx.fillStyle='#e2554a'; ctx.fillRect(x-4,y-16,3,3);
+}
+function drawDumpster(x){
+  const y=FLOOR_TOP+34, w=78, h=34;
+  ctx.fillStyle='#234a2e'; ctx.fillRect(x-w/2,y-h,w,h);
+  ctx.fillStyle='#1a3a24'; ctx.fillRect(x-w/2,y-h,w,7);          // lid
+  ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fillRect(x-w/2,y-7,w,7);
+  ctx.fillStyle='#2c5c39'; for(let i=1;i<5;i++) ctx.fillRect(x-w/2+i*w/5,y-h+8,2,h-8);
+  ctx.fillStyle='#caa'; ctx.font='bold 9px Arial'; ctx.textAlign='center';
+  ctx.fillStyle='rgba(255,255,255,0.25)'; ctx.fillText('NYC', x, y-14);
+  // trash bag beside it
+  ctx.fillStyle='#1c1c22'; ctx.beginPath(); ctx.ellipse(x+w/2+8,y-7,9,8,0,0,7); ctx.fill();
 }
 
 function drawWorld(){
   const cam=game.cam;
   ctx.save(); ctx.translate(-cam,0);
-  // end-of-stage marker
-  if(game.waves && game.waves.every(w=>w.spawned)){
-    // subtle goal glow at the far right
-  }
+  // street furniture sits behind the fighters
+  drawProps(cam);
   // draw shadows then sort by y
   const all=[...game.enemies, player].sort((a,b)=>a.y-b.y);
   for(const f of all) drawShadow(f);
@@ -694,7 +834,7 @@ function drawShadow(f){
   ctx.beginPath(); ctx.ellipse(f.x, f.y, sw*0.5, 6, 0,0,7); ctx.fill();
 }
 
-// Draw a chunky 16-bit-ish baller
+// Draw a beefy 16-bit baller with team uniform + shading
 function drawFighter(f){
   const x=f.x, y=f.y - f.z;     // z lifts the body
   const dir=f.dir;
@@ -703,84 +843,116 @@ function drawFighter(f){
   ctx.translate(x,y);
   if(dir<0) ctx.scale(-1,1);
 
-  // flash white when hit
   const flash = f.flashT>0 && Math.floor(f.flashT*40)%2===0;
+  const C = c => flash ? '#fff' : c;     // white flash on hit
+  const skin=f.skin, jersey=f.jersey, trim=f.trim, shorts=f.shorts, sStripe=f.shortsTrim;
+  const shoe='#f4f4f6';
+  const SH='rgba(0,0,0,0.20)', HL='rgba(255,255,255,0.12)';
+  // beveled rect: light top edge, dark right/bottom — gives the pixel-sprite pop
+  function br(bx,by,bw,bh,fill){ ctx.fillStyle=C(fill); ctx.fillRect(bx,by,bw,bh);
+    ctx.fillStyle=SH; ctx.fillRect(bx+bw-2,by,2,bh); ctx.fillStyle=HL; ctx.fillRect(bx,by,bw,1); }
 
-  const skin = f.skin, jersey=f.jersey;
-  const shorts = '#fff';
-  const sock='#fff', shoe='#e8e8e8';
-  const legSwing = (f.state==='walk') ? Math.sin(f.anim)*6 : 0;
+  const walk = f.state==='walk';
+  const sw = walk ? Math.sin(f.anim)*5 : 0;
+  const punching = f.state==='attack' && f.atkType==='punch' && f.atkT>0;
+  const kicking  = f.state==='attack' && f.atkType==='kick'  && f.atkT>0;
 
-  if(down){
-    // lying down
-    ctx.rotate(-0.5);
-    ctx.translate(-6,-10);
+  if(down){ ctx.rotate(-0.55); ctx.translate(-4,-8); }
+
+  // ===== LEGS + SNEAKERS =====
+  function leg(lx, off){
+    br(lx, -32, 9, 24, skin);                                   // calf
+    ctx.fillStyle=C('rgba(0,0,0,0.12)'); ctx.fillRect(lx+6,-32,3,24);
+    br(lx-3, -10+off*0, 14, 8, shoe);                           // sneaker
+    ctx.fillStyle=C(trim); ctx.fillRect(lx-3,-4,14,3);          // sole stripe (team color)
+    ctx.fillStyle=C('rgba(0,0,0,0.18)'); ctx.fillRect(lx-3,-2,14,2);
+    ctx.fillStyle=C(trim); ctx.beginPath();                     // swoosh hint
+    ctx.moveTo(lx+1,-9); ctx.lineTo(lx+9,-6); ctx.lineTo(lx+1,-6); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=C('#fff'); ctx.fillRect(lx-1,-12,9,3);        // sock
   }
-
-  // ---- legs ----
-  ctx.fillStyle = flash?'#fff':shorts;
-  // left leg
-  ctx.fillStyle=flash?'#fff':skin;
-  ctx.fillRect(-12, -22, 9, 16-legSwing*0.4);   // back leg
-  ctx.fillRect(3, -22, 9, 16+legSwing*0.4);      // front leg
-  // shoes
-  ctx.fillStyle=flash?'#fff':shoe;
-  ctx.fillRect(-14, -8+(-legSwing*0.4), 13,7);
-  ctx.fillRect(2,  -8+(legSwing*0.4), 13,7);
-  ctx.fillStyle='#c0202a'; ctx.fillRect(-14,-3+(-legSwing*0.4),13,2); ctx.fillRect(2,-3+(legSwing*0.4),13,2);
-
-  // shorts
-  ctx.fillStyle=flash?'#fff':shorts;
-  ctx.fillRect(-13,-34,26,14);
-  ctx.fillStyle=jersey; ctx.fillRect(-13,-22,26,2);
-
-  // ---- torso / jersey ----
-  ctx.fillStyle=flash?'#fff':jersey;
-  ctx.fillRect(-13,-54,26,22);
-  // jersey shading
-  ctx.fillStyle='rgba(0,0,0,0.12)'; ctx.fillRect(4,-54,9,22);
-  // number
-  ctx.fillStyle = jersey==='#222'?'#ddd':'#fff';
-  ctx.font='bold 11px Arial'; ctx.textAlign='center';
-  ctx.fillText(f.num, 0, -38);
-
-  // ---- arms / attack ----
-  ctx.fillStyle=flash?'#fff':skin;
-  if(f.state==='attack' && f.atkType==='punch' && f.atkT>0){
-    // extended punch arm
-    ctx.fillRect(10,-50, 30, 8);
-    ctx.fillStyle=flash?'#fff':jersey; ctx.fillRect(10,-52,12,11); // sleeve
-    ctx.fillStyle=flash?'#fff':skin; ctx.fillRect(36,-52,9,9);     // fist
-    // back arm
-    ctx.fillRect(-16,-50,8,16);
-  } else if(f.state==='attack' && f.atkType==='kick' && f.atkT>0){
-    // kicking leg forward
-    ctx.fillStyle=flash?'#fff':skin;
-    ctx.fillRect(8,-20, 30, 9);
-    ctx.fillStyle=flash?'#fff':shoe; ctx.fillRect(36,-22,13,9);
-    ctx.fillStyle=flash?'#fff':skin;
-    ctx.fillRect(-14,-50,8,16); ctx.fillRect(8,-50,8,16);
+  if(kicking){
+    leg(-9, 0);                                                 // planted back leg
+    // extended kicking leg
+    ctx.fillStyle=C(skin); ctx.fillRect(6,-34,34,9);
+    ctx.fillStyle=C('rgba(0,0,0,0.12)'); ctx.fillRect(6,-28,34,3);
+    ctx.fillStyle=C(shoe); ctx.fillRect(38,-36,15,11);
+    ctx.fillStyle=C(trim); ctx.fillRect(38,-27,15,2);
   } else {
-    const sw = (f.state==='walk')?Math.sin(f.anim)*4:0;
-    ctx.fillRect(-16,-50+sw,8,17);
-    ctx.fillStyle=flash?'#fff':jersey; ctx.fillRect(8,-54,8,8);
-    ctx.fillStyle=flash?'#fff':skin; ctx.fillRect(8,-50-sw,8,17);
+    leg(-12+(walk? sw*0.5:0), 0);                               // back leg
+    leg(  2-(walk? sw*0.5:0), 0);                               // front leg
   }
 
-  // ---- head ----
-  ctx.fillStyle=flash?'#fff':skin;
-  ctx.fillRect(-9,-70,18,18);
-  // hair
-  ctx.fillStyle = f.isPlayer ? '#5a3a1a' : '#1a1a1a';
-  ctx.fillRect(-9,-72,18,7);
-  if(f.isPlayer){ // headband
-    ctx.fillStyle='#ff7a1f'; ctx.fillRect(-9,-66,18,4);
+  // ===== SHORTS (baggy, side stripe) =====
+  br(-14, -46, 28, 18, shorts);
+  ctx.fillStyle=C(sStripe); ctx.fillRect(-14,-46,3,18); ctx.fillRect(11,-46,3,18);   // side stripes
+  ctx.fillStyle=C(trim); ctx.fillRect(-14,-30,28,2);                                 // hem trim
+  ctx.fillStyle=C('rgba(0,0,0,0.16)'); ctx.fillRect(-1,-46,2,16);                    // leg split
+
+  // ===== BACK ARM (drawn before torso) =====
+  if(!kicking){
+    const by=-66+(walk? -sw*0.5:0);
+    ctx.fillStyle=C(jersey); ctx.fillRect(-19,-70,8,9);          // sleeve
+    ctx.fillStyle=C(skin); ctx.fillRect(-19,by,7,16);            // upper/forearm
+    ctx.fillStyle=C(skin); ctx.fillRect(-18,by+15,7,6);          // hand
   }
-  // face
-  ctx.fillStyle='#000'; ctx.fillRect(2,-63,3,3); // eye
-  if(down){ ctx.fillRect(1,-63,4,2); } // x_x-ish
+
+  // ===== TORSO / JERSEY (tank top) =====
+  br(-14, -70, 28, 26, jersey);
+  ctx.fillStyle=C(skin); ctx.fillRect(-14,-70,4,9); ctx.fillRect(10,-70,4,9);   // shoulders (skin through armholes)
+  ctx.fillStyle=C(trim); ctx.fillRect(-14,-70,28,2);                            // shoulder trim
+  ctx.fillStyle=C(trim); ctx.fillRect(-14,-70,2,26); ctx.fillRect(12,-70,2,26); // side panels
+  // neckline V
+  ctx.fillStyle=C(trim); ctx.beginPath();
+  ctx.moveTo(-4,-70); ctx.lineTo(4,-70); ctx.lineTo(0,-63); ctx.closePath(); ctx.fill();
+  ctx.fillStyle=C(skin); ctx.beginPath(); ctx.moveTo(-3,-70); ctx.lineTo(3,-70); ctx.lineTo(0,-65); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,0.16)'; ctx.fillRect(6,-68,8,24);                   // body shadow
+  // chest number
+  ctx.fillStyle=C(f.numColor); ctx.font='bold 12px Arial'; ctx.textAlign='center';
+  ctx.fillText(f.num, 0, -50);
+
+  // ===== FRONT ARM / ATTACK =====
+  if(punching){
+    ctx.fillStyle=C(jersey); ctx.fillRect(8,-68,12,11);          // sleeve
+    ctx.fillStyle=C(skin);   ctx.fillRect(16,-65,26,8);          // extended arm
+    ctx.fillStyle=C('#fff'); ctx.fillRect(40,-67,11,11);         // fist (taped)
+    ctx.fillStyle=C(skin);   ctx.fillRect(42,-65,7,7);
+    ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=2;    // motion lines
+    ctx.beginPath(); ctx.moveTo(20,-72); ctx.lineTo(34,-72); ctx.moveTo(20,-56); ctx.lineTo(34,-56); ctx.stroke();
+  } else if(!kicking){
+    const fy=-66+(walk? sw*0.5:0);
+    ctx.fillStyle=C(jersey); ctx.fillRect(10,-70,8,9);           // sleeve
+    ctx.fillStyle=C(skin);   ctx.fillRect(11,fy,7,16);           // forearm
+    ctx.fillStyle=C(skin);   ctx.fillRect(11,fy+15,7,6);         // fist
+  } else {
+    // guard during kick
+    ctx.fillStyle=C(skin); ctx.fillRect(10,-68,7,14);
+  }
+
+  // ===== HEAD =====
+  ctx.fillStyle=C(skin); ctx.fillRect(-8,-86,17,17);            // head
+  ctx.fillStyle=C(skin); ctx.fillRect(-9,-79,2,8);              // ear
+  ctx.fillStyle='rgba(0,0,0,0.14)'; ctx.fillRect(5,-86,4,17);  // face shadow side
+  // hair / headband
+  if(f.isPlayer){
+    ctx.fillStyle=C(f.hair); ctx.fillRect(-8,-88,17,6);
+    ctx.fillStyle=C(f.headband); ctx.fillRect(-9,-83,18,4);     // Knicks blue headband
+    ctx.fillStyle=C(f.jersey); ctx.fillRect(-9,-82,18,1);
+  } else {
+    ctx.fillStyle=C(f.hair); ctx.fillRect(-8,-88,17,7);         // Spurs short fade
+    ctx.fillStyle=C(f.hair); ctx.fillRect(-8,-81,3,5); ctx.fillRect(6,-81,3,5);
+  }
+  // face — brow + eye + set jaw
+  ctx.fillStyle='#1a0f0a'; ctx.fillRect(1,-77,6,2);             // brow
+  ctx.fillStyle='#000'; ctx.fillRect(3,-75,3,3);                // eye
+  ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fillRect(-1,-71,8,1);   // mouth/jaw
+  if(down){ ctx.fillStyle='#000'; ctx.fillRect(2,-76,4,2); ctx.fillRect(2,-72,5,1); } // dazed
 
   ctx.restore();
+
+  // KO stars when down
+  if(down){ const t=game.time*6;
+    for(let i=0;i<3;i++){ ctx.fillStyle='#ffd24a';
+      drawStar(f.x + Math.cos(t+i*2.1)*12, f.y-f.z-46 + Math.sin(t+i*2.1)*4, 4); } }
 
   // HP pip above enemies that are hurt
   if(!f.isPlayer && f.state!=='down' && f.hp<f.maxhp){
@@ -794,13 +966,16 @@ function drawHUD(){
   // Player portrait + health
   ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(10,10,250,46);
   ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.strokeRect(10,10,250,46);
-  // mini face
-  ctx.fillStyle='#caa07a'; ctx.fillRect(18,18,30,30);
-  ctx.fillStyle='#ff7a1f'; ctx.fillRect(18,24,30,5);
-  ctx.fillStyle='#000'; ctx.fillRect(38,33,4,4);
+  // mini face — Knicks colors
+  ctx.fillStyle='#c9966a'; ctx.fillRect(18,18,30,30);            // skin
+  ctx.fillStyle='#241608'; ctx.fillRect(18,18,30,5);            // hair
+  ctx.fillStyle='#1d428a'; ctx.fillRect(18,23,30,5);            // blue headband
+  ctx.fillStyle='#1a0f0a'; ctx.fillRect(34,33,4,2);            // brow
+  ctx.fillStyle='#000'; ctx.fillRect(36,36,4,4);              // eye
+  ctx.fillStyle='#f5821f'; ctx.fillRect(18,44,30,4);          // orange jersey collar
   // name
-  ctx.fillStyle='#fff'; ctx.font='bold 12px Arial'; ctx.textAlign='left';
-  ctx.fillText('#33 BAXTER', 56, 26);
+  ctx.fillStyle='#f5821f'; ctx.font='bold 12px Arial'; ctx.textAlign='left';
+  ctx.fillText('#33  KNICKS', 56, 26);
   // health bar
   ctx.fillStyle='#400'; ctx.fillRect(56,32,196,14);
   const hpw = 196*Math.max(0,player.hp/player.maxhp);
@@ -818,7 +993,7 @@ function drawHUD(){
   const left = game.enemies.filter(e=>e.state!=='down').length;
   if(game.curWave && left>0){
     ctx.textAlign='center'; ctx.fillStyle='rgba(255,80,80,0.95)'; ctx.font='bold 13px Arial';
-    ctx.fillText(left+' RIVALS LEFT', VW/2, 24);
+    ctx.fillText(left+' SPURS LEFT', VW/2, 24);
   }
 }
 
